@@ -97,27 +97,48 @@ function saveDocument() {
   document.getElementById('debug-info').textContent = 'Document saved as HTML';
 }
 
-// Function to save the document as DOCX
+// Function to save as DOCX
 function saveAsDocx() {
   document.getElementById('debug-info').textContent = 'Preparing DOCX file...';
   
   try {
-    // Check if docx is defined
-    if (typeof docx === 'undefined') {
-      throw new Error('DOCX library not loaded. Please refresh the page and try again.');
-    }
+    // Store the current ranges with highlights
+    const highlightedRanges = [];
+    documentSections.forEach(section => {
+      if (section.range) {
+        highlightedRanges.push({
+          index: section.range.index,
+          length: section.range.length
+        });
+      }
+    });
     
-    // Create a new document
+    // Remove all highlights
+    highlightedRanges.forEach(range => {
+      quill.formatText(range.index, range.length, {
+        'background': false
+      });
+    });
+    
+    // Create document with default styles
     const doc = new docx.Document({
       sections: [{
         properties: {},
-        children: convertHtmlToDocxElements(quill.root.innerHTML)
+        children: [
+          new docx.Paragraph({
+            children: [
+              new docx.TextRun({
+                text: quill.getText(),
+                size: 24, // 12pt font size (in half-points)
+                font: "Arial"
+              })
+            ]
+          })
+        ]
       }]
     });
     
-    // Generate the DOCX file
     docx.Packer.toBlob(doc).then(blob => {
-      // Save the file
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -125,202 +146,59 @@ function saveAsDocx() {
       a.click();
       
       URL.revokeObjectURL(url);
+      
+      // Restore highlights
+      highlightedRanges.forEach(range => {
+        quill.formatText(range.index, range.length, {
+          'background': '#e6f7ff'
+        });
+      });
+      
       document.getElementById('debug-info').textContent = 'Document saved as DOCX';
     });
   } catch (error) {
     console.error('Error creating DOCX:', error);
     document.getElementById('debug-info').textContent = 'Error creating DOCX: ' + error.message;
+    
+    // Restore highlights even if there's an error
+    highlightedRanges.forEach(range => {
+      quill.formatText(range.index, range.length, {
+        'background': '#e6f7ff'
+      });
+    });
   }
 }
 
-// Helper function to convert HTML to DOCX elements
-function convertHtmlToDocxElements(html) {
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
-  
-  const elements = [];
-  
-  // Process each child node
-  for (const node of tempDiv.childNodes) {
-    processNode(node, elements);
-  }
-  
-  return elements;
+// Helper function to convert pixels to points (for DOCX)
+function pxToPoints(px) {
+  if (!px) return 24; // Default to 12pt (24 half-points)
+  const numPx = parseInt(px);
+  return isNaN(numPx) ? 24 : Math.round(numPx * 2);
 }
 
-// Process a node and its children recursively
+// Function to process a node and its styles
 function processNode(node, elements) {
   if (node.nodeType === Node.TEXT_NODE) {
-    // Text node - if it's not just whitespace, add it
-    if (node.textContent.trim()) {
-      elements.push(new docx.Paragraph({
-        children: [new docx.TextRun(node.textContent)]
-      }));
+    const text = node.textContent.trim();
+    if (text) {
+      elements.push(
+        new docx.Paragraph({
+          children: [
+            new docx.TextRun({
+              text: text,
+              size: 24, // Default 12pt font size
+              font: "Arial"
+            })
+          ]
+        })
+      );
     }
   } else if (node.nodeType === Node.ELEMENT_NODE) {
-    // Element node
-    switch (node.tagName.toLowerCase()) {
-      case 'h1':
-        elements.push(new docx.Paragraph({
-          text: node.textContent,
-          heading: docx.HeadingLevel.HEADING_1,
-          bold: true
-        }));
-        break;
-      case 'h2':
-        elements.push(new docx.Paragraph({
-          text: node.textContent,
-          heading: docx.HeadingLevel.HEADING_2,
-          bold: true
-        }));
-        break;
-      case 'h3':
-        elements.push(new docx.Paragraph({
-          text: node.textContent,
-          heading: docx.HeadingLevel.HEADING_3,
-          bold: true
-        }));
-        break;
-      case 'p':
-        // Process paragraph with formatting
-        elements.push(createFormattedParagraph(node));
-        break;
-      case 'ul':
-        // Process unordered list
-        for (const li of node.children) {
-          if (li.tagName.toLowerCase() === 'li') {
-            elements.push(new docx.Paragraph({
-              text: li.textContent,
-              bullet: {
-                level: 0
-              }
-            }));
-          }
-        }
-        break;
-      case 'ol':
-        // Process ordered list
-        let num = 1;
-        for (const li of node.children) {
-          if (li.tagName.toLowerCase() === 'li') {
-            elements.push(new docx.Paragraph({
-              text: li.textContent,
-              numbering: {
-                reference: 'default-numbering',
-                level: 0
-              }
-            }));
-            num++;
-          }
-        }
-        break;
-      case 'div':
-      case 'span':
-        // Process div/span and its children
-        const children = [];
-        for (const child of node.childNodes) {
-          processNode(child, elements);
-        }
-        break;
-      case 'br':
-        // Add an empty paragraph for line breaks
-        elements.push(new docx.Paragraph({}));
-        break;
-      case 'strong':
-      case 'b':
-        // Bold text
-        elements.push(new docx.Paragraph({
-          children: [new docx.TextRun({
-            text: node.textContent,
-            bold: true
-          })]
-        }));
-        break;
-      case 'em':
-      case 'i':
-        // Italic text
-        elements.push(new docx.Paragraph({
-          children: [new docx.TextRun({
-            text: node.textContent,
-            italic: true
-          })]
-        }));
-        break;
-      case 'u':
-        // Underlined text
-        elements.push(new docx.Paragraph({
-          children: [new docx.TextRun({
-            text: node.textContent,
-            underline: {}
-          })]
-        }));
-        break;
-      default:
-        // For other elements, just add their text content
-        if (node.textContent.trim()) {
-          elements.push(new docx.Paragraph({
-            text: node.textContent
-          }));
-        }
-        break;
+    // Process child nodes
+    for (const childNode of node.childNodes) {
+      processNode(childNode, elements);
     }
   }
-}
-
-// Create a paragraph with formatted text runs
-function createFormattedParagraph(node) {
-  const textRuns = [];
-  
-  // Process text and inline formatting elements
-  for (const child of node.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      if (child.textContent.trim()) {
-        textRuns.push(new docx.TextRun(child.textContent));
-      }
-    } else if (child.nodeType === Node.ELEMENT_NODE) {
-      switch (child.tagName.toLowerCase()) {
-        case 'strong':
-        case 'b':
-          textRuns.push(new docx.TextRun({
-            text: child.textContent,
-            bold: true
-          }));
-          break;
-        case 'em':
-        case 'i':
-          textRuns.push(new docx.TextRun({
-            text: child.textContent,
-            italic: true
-          }));
-          break;
-        case 'u':
-          textRuns.push(new docx.TextRun({
-            text: child.textContent,
-            underline: {}
-          }));
-          break;
-        case 'span':
-          // Try to extract style information
-          const style = child.getAttribute('style') || '';
-          const color = style.match(/color:\s*([^;]+)/);
-          const bgColor = style.match(/background-color:\s*([^;]+)/);
-          
-          textRuns.push(new docx.TextRun({
-            text: child.textContent,
-            color: color ? color[1] : undefined,
-            highlight: bgColor ? bgColor[1] : undefined
-          }));
-          break;
-        default:
-          textRuns.push(new docx.TextRun(child.textContent));
-          break;
-      }
-    }
-  }
-  
-  return new docx.Paragraph({
-    children: textRuns
-  });
 }
 
 // Function to load a resume template
