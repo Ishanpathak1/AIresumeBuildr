@@ -1,10 +1,8 @@
-import { Configuration, OpenAIApi } from 'openai';
+import { OpenAI } from 'openai';
 
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-const openai = new OpenAIApi(configuration);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,9 +12,18 @@ export default async function handler(req, res) {
   try {
     const { message, sectionContent, sectionName } = req.body;
 
+    if (!sectionContent) {
+      return res.status(400).json({ 
+        error: 'No content provided' 
+      });
+    }
+
+    console.log('Processing request for section:', sectionName);
+    console.log('Content:', sectionContent);
+
     const prompt = `Please improve this ${sectionName}. First provide your explanation, then provide ONLY the improved text between <suggestion></suggestion> tags.\n\nCurrent text: "${sectionContent}"`;
 
-    const completion = await openai.createChatCompletion({
+    const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
@@ -30,11 +37,18 @@ export default async function handler(req, res) {
       ],
     });
 
-    const response = completion.data.choices[0].message.content;
+    const response = completion.choices[0].message.content;
+    console.log('OpenAI response:', response);
 
     res.status(200).json({ response });
   } catch (error) {
     console.error('OpenAI API error:', error);
-    res.status(500).json({ error: 'Error processing your request' });
+    
+    // Send more detailed error information
+    res.status(500).json({ 
+      error: 'Error processing your request',
+      message: error.message,
+      details: error.response?.data || 'No additional details'
+    });
   }
 } 
