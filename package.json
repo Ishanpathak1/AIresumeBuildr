@@ -1,17 +1,26 @@
 {
-  "name": "airesumebuildr",
+  "name": "ai-powered-docx-editor",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "AI-powered document editor with interactive lines",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
+    "cors": "^2.8.5",
+    "docx-parser": "^0.2.1",
+    "docx4js": "^3.3.0",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mammoth": "^1.9.0",
-    "pdf-lib": "^1.17.1"
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.86.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
   }
 }

@@ -3,92 +3,175 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Advanced DOCX Editor with Interactive Lines</title>
-  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
-  <!-- Add Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Arial&family=Calibri&family=Times+New+Roman&family=Courier+New&family=Georgia&family=Verdana&family=Tahoma&family=Trebuchet+MS&family=Garamond&family=Comic+Sans+MS&display=swap" rel="stylesheet">
-  <!-- Add Font Awesome for icons -->
+  <title>AI-Powered Resume Editor</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    header {
+      text-align: center;
+      padding: 40px 0;
+    }
+    
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+    
+    header p {
+      font-size: 1.2rem;
+      color: #7f8c8d;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .hero {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      padding: 40px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    
+    .hero h2 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #2c3e50;
+    }
+    
+    .hero p {
+      font-size: 1.1rem;
+      margin-bottom: 30px;
+      color: #555;
+    }
+    
+    .cta-button {
+      display: inline-block;
+      background-color: #4CAF50;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    
+    .cta-button:hover {
+      background-color: #45a049;
+    }
+    
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+      margin: 40px 0;
+    }
+    
+    .feature {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+      flex: 1;
+      min-width: 300px;
+      max-width: 350px;
+      text-align: center;
+    }
+    
+    .feature i {
+      font-size: 3rem;
+      color: #4CAF50;
+      margin-bottom: 20px;
+    }
+    
+    .feature h3 {
+      font-size: 1.5rem;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+    
+    .feature p {
+      color: #555;
+    }
+    
+    footer {
+      text-align: center;
+      padding: 20px;
+      margin-top: auto;
+      color: #7f8c8d;
+      border-top: 1px solid #eee;
+    }
+    
+    @media (max-width: 768px) {
+      .features {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .feature {
+        max-width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <h1><i class="fas fa-file-word"></i> Advanced DOCX Editor</h1>
-  </header>
-  
-  <div class="main-container">
-    <div id="toolbar-container">
-      <div class="file-actions">
-        <label for="docx-upload" class="upload-btn">
-          <i class="fas fa-file-upload"></i> Upload DOCX
-          <input type="file" id="docx-upload" accept=".docx" />
-        </label>
-        <button id="save-doc" class="action-btn"><i class="fas fa-save"></i> Save</button>
+  <div class="container">
+    <header>
+      <h1><i class="fas fa-file-word"></i> AI-Powered Resume Editor</h1>
+      <p>Create professional resumes with AI assistance to stand out in your job search</p>
+    </header>
+    
+    <div class="hero">
+      <h2>Optimize Your Resume with AI</h2>
+      <p>Our AI-powered editor helps you create tailored resumes that pass through Applicant Tracking Systems (ATS) and catch recruiters' attention. Upload your existing resume or start from scratch with our templates.</p>
+      <a href="upload-test.html" class="cta-button">
+        <i class="fas fa-edit"></i> Start Editing Now
+      </a>
+    </div>
+    
+    <div class="features">
+      <div class="feature">
+        <i class="fas fa-robot"></i>
+        <h3>AI Assistant</h3>
+        <p>Get real-time suggestions to improve your resume content based on job descriptions and industry best practices.</p>
       </div>
       
-      <div class="drawing-tools">
-        <button id="toggle-draw" class="action-btn"><i class="fas fa-pencil-alt"></i> Toggle Draw</button>
-        <button id="increase-thickness" class="action-btn"><i class="fas fa-plus"></i> Line Thickness</button>
-        <button id="decrease-thickness" class="action-btn"><i class="fas fa-minus"></i> Line Thickness</button>
-        <button id="undo" class="action-btn"><i class="fas fa-undo"></i> Undo</button>
-        <button id="redo" class="action-btn"><i class="fas fa-redo"></i> Redo</button>
-        <button id="deselect" class="action-btn"><i class="fas fa-times"></i> Deselect Line</button>
+      <div class="feature">
+        <i class="fas fa-file-upload"></i>
+        <h3>DOCX Import</h3>
+        <p>Seamlessly upload your existing DOCX resume files and continue editing with our advanced tools.</p>
+      </div>
+      
+      <div class="feature">
+        <i class="fas fa-tag"></i>
+        <h3>Section Marking</h3>
+        <p>Organize your resume into sections for better analysis and targeted improvements from our AI.</p>
       </div>
     </div>
     
-    <div id="editor-container">
-      <div id="toolbar">
-        <!-- Font dropdown with more options -->
-        <select class="ql-font">
-          <option value="arial" selected>Arial</option>
-          <option value="calibri">Calibri</option>
-          <option value="times-new-roman">Times New Roman</option>
-          <option value="courier-new">Courier New</option>
-          <option value="georgia">Georgia</option>
-          <option value="verdana">Verdana</option>
-          <option value="tahoma">Tahoma</option>
-          <option value="trebuchet-ms">Trebuchet MS</option>
-          <option value="garamond">Garamond</option>
-          <option value="comic-sans-ms">Comic Sans MS</option>
-        </select>
-        <select class="ql-size">
-          <option value="small">Small</option>
-          <option selected>Normal</option>
-          <option value="large">Large</option>
-          <option value="huge">Huge</option>
-        </select>
-        <select class="ql-color"></select>
-        <select class="ql-background"></select>
-        <button class="ql-bold"></button>
-        <button class="ql-italic"></button>
-        <button class="ql-underline"></button>
-        <button class="ql-strike"></button>
-        <button class="ql-blockquote"></button>
-        <button class="ql-code-block"></button>
-        <button class="ql-list" value="ordered"></button>
-        <button class="ql-list" value="bullet"></button>
-        <button class="ql-indent" value="-1"></button>
-        <button class="ql-indent" value="+1"></button>
-        <button class="ql-direction" value="rtl"></button>
-        <select class="ql-align"></select>
-        <button class="ql-link"></button>
-        <button class="ql-image"></button>
-        <button class="ql-video"></button>
-        <button class="ql-clean"></button>
-      </div>
-      <div id="editor-wrapper">
-        <div id="editor"></div>
-        <canvas id="line-canvas"></canvas>
-      </div>
-    </div>
+    <footer>
+      <p>&copy; 2025 AI-Powered Resume Editor. All rights reserved.</p>
+    </footer>
   </div>
-  
-  <footer>
-    <p>&copy; 2023 Advanced DOCX Editor. All rights reserved.</p>
-  </footer>
-
-  <script src="script.js"></script>
 </body>
 </html>
