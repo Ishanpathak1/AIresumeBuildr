@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('debug-info').textContent = 'Editor ready';
 });
 
-// Function to save the document
+// Function to save the document as HTML
 function saveDocument() {
   const content = quill.root.innerHTML;
   const blob = new Blob([content], {type: 'text/html'});
@@ -95,6 +95,232 @@ function saveDocument() {
   
   URL.revokeObjectURL(url);
   document.getElementById('debug-info').textContent = 'Document saved as HTML';
+}
+
+// Function to save the document as DOCX
+function saveAsDocx() {
+  document.getElementById('debug-info').textContent = 'Preparing DOCX file...';
+  
+  try {
+    // Check if docx is defined
+    if (typeof docx === 'undefined') {
+      throw new Error('DOCX library not loaded. Please refresh the page and try again.');
+    }
+    
+    // Create a new document
+    const doc = new docx.Document({
+      sections: [{
+        properties: {},
+        children: convertHtmlToDocxElements(quill.root.innerHTML)
+      }]
+    });
+    
+    // Generate the DOCX file
+    docx.Packer.toBlob(doc).then(blob => {
+      // Save the file
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'resume.docx';
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      document.getElementById('debug-info').textContent = 'Document saved as DOCX';
+    });
+  } catch (error) {
+    console.error('Error creating DOCX:', error);
+    document.getElementById('debug-info').textContent = 'Error creating DOCX: ' + error.message;
+  }
+}
+
+// Helper function to convert HTML to DOCX elements
+function convertHtmlToDocxElements(html) {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  
+  const elements = [];
+  
+  // Process each child node
+  for (const node of tempDiv.childNodes) {
+    processNode(node, elements);
+  }
+  
+  return elements;
+}
+
+// Process a node and its children recursively
+function processNode(node, elements) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    // Text node - if it's not just whitespace, add it
+    if (node.textContent.trim()) {
+      elements.push(new docx.Paragraph({
+        children: [new docx.TextRun(node.textContent)]
+      }));
+    }
+  } else if (node.nodeType === Node.ELEMENT_NODE) {
+    // Element node
+    switch (node.tagName.toLowerCase()) {
+      case 'h1':
+        elements.push(new docx.Paragraph({
+          text: node.textContent,
+          heading: docx.HeadingLevel.HEADING_1,
+          bold: true
+        }));
+        break;
+      case 'h2':
+        elements.push(new docx.Paragraph({
+          text: node.textContent,
+          heading: docx.HeadingLevel.HEADING_2,
+          bold: true
+        }));
+        break;
+      case 'h3':
+        elements.push(new docx.Paragraph({
+          text: node.textContent,
+          heading: docx.HeadingLevel.HEADING_3,
+          bold: true
+        }));
+        break;
+      case 'p':
+        // Process paragraph with formatting
+        elements.push(createFormattedParagraph(node));
+        break;
+      case 'ul':
+        // Process unordered list
+        for (const li of node.children) {
+          if (li.tagName.toLowerCase() === 'li') {
+            elements.push(new docx.Paragraph({
+              text: li.textContent,
+              bullet: {
+                level: 0
+              }
+            }));
+          }
+        }
+        break;
+      case 'ol':
+        // Process ordered list
+        let num = 1;
+        for (const li of node.children) {
+          if (li.tagName.toLowerCase() === 'li') {
+            elements.push(new docx.Paragraph({
+              text: li.textContent,
+              numbering: {
+                reference: 'default-numbering',
+                level: 0
+              }
+            }));
+            num++;
+          }
+        }
+        break;
+      case 'div':
+      case 'span':
+        // Process div/span and its children
+        const children = [];
+        for (const child of node.childNodes) {
+          processNode(child, elements);
+        }
+        break;
+      case 'br':
+        // Add an empty paragraph for line breaks
+        elements.push(new docx.Paragraph({}));
+        break;
+      case 'strong':
+      case 'b':
+        // Bold text
+        elements.push(new docx.Paragraph({
+          children: [new docx.TextRun({
+            text: node.textContent,
+            bold: true
+          })]
+        }));
+        break;
+      case 'em':
+      case 'i':
+        // Italic text
+        elements.push(new docx.Paragraph({
+          children: [new docx.TextRun({
+            text: node.textContent,
+            italic: true
+          })]
+        }));
+        break;
+      case 'u':
+        // Underlined text
+        elements.push(new docx.Paragraph({
+          children: [new docx.TextRun({
+            text: node.textContent,
+            underline: {}
+          })]
+        }));
+        break;
+      default:
+        // For other elements, just add their text content
+        if (node.textContent.trim()) {
+          elements.push(new docx.Paragraph({
+            text: node.textContent
+          }));
+        }
+        break;
+    }
+  }
+}
+
+// Create a paragraph with formatted text runs
+function createFormattedParagraph(node) {
+  const textRuns = [];
+  
+  // Process text and inline formatting elements
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if (child.textContent.trim()) {
+        textRuns.push(new docx.TextRun(child.textContent));
+      }
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      switch (child.tagName.toLowerCase()) {
+        case 'strong':
+        case 'b':
+          textRuns.push(new docx.TextRun({
+            text: child.textContent,
+            bold: true
+          }));
+          break;
+        case 'em':
+        case 'i':
+          textRuns.push(new docx.TextRun({
+            text: child.textContent,
+            italic: true
+          }));
+          break;
+        case 'u':
+          textRuns.push(new docx.TextRun({
+            text: child.textContent,
+            underline: {}
+          }));
+          break;
+        case 'span':
+          // Try to extract style information
+          const style = child.getAttribute('style') || '';
+          const color = style.match(/color:\s*([^;]+)/);
+          const bgColor = style.match(/background-color:\s*([^;]+)/);
+          
+          textRuns.push(new docx.TextRun({
+            text: child.textContent,
+            color: color ? color[1] : undefined,
+            highlight: bgColor ? bgColor[1] : undefined
+          }));
+          break;
+        default:
+          textRuns.push(new docx.TextRun(child.textContent));
+          break;
+      }
+    }
+  }
+  
+  return new docx.Paragraph({
+    children: textRuns
+  });
 }
 
 // Function to load a resume template
@@ -171,8 +397,15 @@ function sendChatMessage() {
   // Clear input
   chatInput.value = '';
   
-  // Process message (in a real app, this would call an AI API)
-  processUserMessage(message);
+  // Simulate AI response
+  document.getElementById('debug-info').textContent = 'Processing message...';
+  
+  setTimeout(() => {
+    const response = "I've analyzed your job description. Here are some suggestions to tailor your resume:";
+    addMessageToChat(response, 'ai');
+    document.getElementById('debug-info').textContent = 'Message processed';
+    showSuggestions();
+  }, 1000);
 }
 
 // Function to add message to chat
@@ -183,18 +416,6 @@ function addMessageToChat(message, sender) {
   messageDiv.textContent = message;
   chatMessages.appendChild(messageDiv);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Function to process user message
-function processUserMessage(message) {
-  // Simulate AI response
-  setTimeout(() => {
-    const response = "I've analyzed your message. To improve your resume for this job description, consider highlighting your relevant skills and experience more prominently.";
-    addMessageToChat(response, 'ai');
-    
-    // Show suggestions
-    showSuggestions();
-  }, 1000);
 }
 
 // Function to show suggestions
