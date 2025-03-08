@@ -1,23 +1,31 @@
+require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const { OpenAI } = require('openai');
 const path = require('path');
-require('dotenv').config();
 const multer = require('multer');
 const mammoth = require('mammoth');
 const docx4js = require('docx4js');
 const fs = require('fs');
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Initialize OpenAI
+// Initialize OpenAI with API key from .env
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+
+// Debug middleware to log all requests
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+});
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -42,12 +50,9 @@ app.get('/test', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'test.html'));
 });
 
-// Test endpoint - make sure this comes after static middleware
+// Test endpoint to verify server is running
 app.get('/api/test', (req, res) => {
-    res.json({ 
-        message: 'API is working',
-        timestamp: new Date().toISOString()
-    });
+    res.json({ status: 'Server is running correctly' });
 });
 
 // Echo endpoint
@@ -59,24 +64,105 @@ app.post('/api/echo', (req, res) => {
     });
 });
 
-// OpenAI endpoint
-app.post('/api/openai', async (req, res) => {
+// API endpoint for document analysis
+app.post('/api/analyze', async (req, res) => {
     try {
-        const { prompt } = req.body;
+        console.log('Analyze API called with:', req.body);
+        const { content } = req.body;
+        
+        if (!content || content.trim().length === 0) {
+            return res.status(400).json({ error: 'Document content is empty' });
+        }
         
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: prompt }],
+            model: "gpt-4",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an expert resume reviewer. Analyze the resume and provide specific, actionable feedback to improve it."
+                },
+                {
+                    role: "user",
+                    content: content
+                }
+            ],
+            temperature: 0.7,
             max_tokens: 1000
         });
-
+        
         res.json({ response: completion.choices[0].message.content });
     } catch (error) {
-        console.error('OpenAI API error:', error);
-        res.status(500).json({ 
-            error: 'Failed to process OpenAI request',
-            details: error.message 
+        console.error('OpenAI API Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API endpoint for chat messages
+app.post('/api/chat', async (req, res) => {
+    try {
+        console.log('Chat API called with:', req.body);
+        const { message, sectionContent, sectionName } = req.body;
+        
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+                {
+                    role: "system",
+                    content: `You are an expert resume reviewer. The user will provide a job description or question. 
+                                Analyze their resume ${sectionName !== 'entire document' ? `section "${sectionName}"` : 'document'} 
+                                and provide specific, actionable feedback to improve it for the job they're targeting.`
+                },
+                {
+                    role: "user",
+                    content: `Resume ${sectionName !== 'entire document' ? `section "${sectionName}": ${sectionContent}` : `content: ${sectionContent}`}
+                                
+                                My request: ${message}`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
         });
+        
+        res.json({ response: completion.choices[0].message.content });
+    } catch (error) {
+        console.error('OpenAI API Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API endpoint for section optimization
+app.post('/api/optimize', async (req, res) => {
+    try {
+        console.log('Optimize API called with:', req.body);
+        const { sectionContent, sectionName, jobDescription } = req.body;
+        
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+                {
+                    role: "system",
+                    content: `You are an expert resume optimizer. You will be given a resume section and a job description.
+                                Rewrite the resume section to better match the job description, incorporating relevant keywords
+                                and highlighting relevant experience. Keep the same basic information but make it more appealing
+                                for the specific job. Return ONLY the optimized text without any explanations.`
+                },
+                {
+                    role: "user",
+                    content: `Resume section "${sectionName}": ${sectionContent}
+                                
+                                Job description: ${jobDescription}
+                                
+                                Please optimize this resume section for the job description.`
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
+        });
+        
+        res.json({ response: completion.choices[0].message.content });
+    } catch (error) {
+        console.error('OpenAI API Error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -117,7 +203,12 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Something broke!' });
 });
 
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-    console.log('OpenAI API Key present:', !!process.env.OPENAI_API_KEY);
+// Serve the main HTML file for all other routes
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Test the server at: http://localhost:${PORT}/api/test`);
 });

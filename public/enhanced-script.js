@@ -384,7 +384,47 @@ function toggleAIChat() {
   }
 }
 
-// Function to send chat message
+// Function to analyze document with OpenAI
+function analyzeDocument() {
+  document.getElementById('debug-info').textContent = 'Analyzing document...';
+  
+  // Get the document content
+  const content = quill.getText();
+  if (!content || content.trim().length === 0) {
+    document.getElementById('debug-info').textContent = 'Error: Document is empty. Please add content before analyzing.';
+    return;
+  }
+  
+  // Show loading state
+  addMessageToChat("Analyzing your document. This may take a moment...", 'ai');
+  
+  // Expand the chat if it's collapsed
+  const chatContainer = document.getElementById('ai-chat-container');
+  if (chatContainer && chatContainer.classList.contains('collapsed')) {
+    toggleAIChat();
+  }
+  
+  // Call the server API
+  fetch('/api/analyze', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ content })
+  })
+  .then(response => response.json())
+  .then(data => {
+    document.getElementById('debug-info').textContent = 'Analysis complete';
+    addMessageToChat(data.response, 'ai');
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    document.getElementById('debug-info').textContent = 'Error analyzing document';
+    addMessageToChat('Sorry, I encountered an error while analyzing the document.', 'ai');
+  });
+}
+
+// Function to send chat message to OpenAI
 function sendChatMessage() {
   const chatInput = document.getElementById('chat-input');
   const message = chatInput.value.trim();
@@ -397,18 +437,171 @@ function sendChatMessage() {
   // Clear input
   chatInput.value = '';
   
-  // Simulate AI response
-  document.getElementById('debug-info').textContent = 'Processing message...';
+  // Get selected section
+  const sectionSelector = document.getElementById('section-selector');
+  const sectionIndex = sectionSelector.value;
+  let sectionContent = '';
+  let sectionName = 'entire document';
   
-  setTimeout(() => {
-    const response = "I've analyzed your job description. Here are some suggestions to tailor your resume:";
-    addMessageToChat(response, 'ai');
-    document.getElementById('debug-info').textContent = 'Message processed';
-    showSuggestions();
-  }, 1000);
+  if (sectionIndex !== '') {
+    const section = documentSections[parseInt(sectionIndex)];
+    if (section) {
+      sectionContent = section.content;
+      sectionName = section.name || 'selected section';
+    }
+  } else {
+    sectionContent = quill.getText();
+  }
+  
+  // Show thinking message
+  const thinkingMessage = addMessageToChat(`Analyzing ${sectionName}...`, 'ai');
+  
+  // Prepare the prompt for improvement suggestion
+  const improvePrompt = `Please improve this ${sectionName}. First provide your explanation, then provide ONLY the improved text between <suggestion></suggestion> tags.\n\nCurrent text: "${sectionContent}"`;
+  
+  // Call the server API
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      message: improvePrompt,
+      userMessage: message,
+      sectionContent,
+      sectionName
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    // Remove thinking message
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    if (thinkingMessage && thinkingMessage.parentNode === chatMessages) {
+      chatMessages.removeChild(thinkingMessage);
+    }
+
+    // Extract suggestion from response if it exists
+    let suggestion = '';
+    let explanation = data.response;
+    
+    // Try to find the suggested text between tags
+    const suggestionMatch = data.response.match(/<suggestion>([\s\S]*?)<\/suggestion>/);
+    if (suggestionMatch && suggestionMatch[1]) {
+      suggestion = suggestionMatch[1].trim();
+      explanation = data.response.replace(/<suggestion>[\s\S]*?<\/suggestion>/g, '').trim();
+    }
+
+    // Add the explanation to the chat
+    addMessageToChat(explanation, 'ai');
+    
+    // Show the suggestion button if we have a section selected and a suggestion
+    if (sectionIndex !== '' && suggestion) {
+      const buttonsDiv = document.createElement('div');
+      buttonsDiv.className = 'ai-chat-buttons';
+      
+      // Add preview button
+      const previewButton = document.createElement('button');
+      previewButton.className = 'ai-chat-btn preview-btn';
+      previewButton.textContent = 'Preview Changes';
+      previewButton.onclick = function() {
+        // Add preview message
+        addMessageToChat('Suggested changes:\n\nOriginal:\n' + sectionContent + '\n\nImproved:\n' + suggestion, 'ai');
+        
+        // Add apply button after preview
+        const previewButtonsDiv = document.createElement('div');
+        previewButtonsDiv.className = 'ai-chat-buttons';
+        
+        const applyAfterPreviewButton = document.createElement('button');
+        applyAfterPreviewButton.className = 'ai-chat-btn apply-btn';
+        applyAfterPreviewButton.textContent = 'Apply Changes';
+        applyAfterPreviewButton.onclick = function() {
+          const section = documentSections[parseInt(sectionIndex)];
+          if (section) {
+            applyProposedChanges(section, suggestion);
+          }
+        };
+        
+        previewButtonsDiv.appendChild(applyAfterPreviewButton);
+        const chatMessages = document.querySelector('.ai-chat-messages');
+        chatMessages.appendChild(previewButtonsDiv);
+      };
+      
+      // Add apply button
+      const applyButton = document.createElement('button');
+      applyButton.className = 'ai-chat-btn apply-btn';
+      applyButton.textContent = 'Apply Changes';
+      applyButton.onclick = function() {
+        const section = documentSections[parseInt(sectionIndex)];
+        if (section) {
+          applyProposedChanges(section, suggestion);
+        }
+      };
+      
+      buttonsDiv.appendChild(previewButton);
+      buttonsDiv.appendChild(applyButton);
+      chatMessages.appendChild(buttonsDiv);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    if (thinkingMessage && thinkingMessage.parentNode === chatMessages) {
+      chatMessages.removeChild(thinkingMessage);
+    }
+    addMessageToChat('Sorry, I encountered an error. Please try again.', 'ai');
+  });
 }
 
-// Function to add message to chat
+// Function to optimize a section based on job description
+function optimizeSection(sectionIndex, jobDescription) {
+  const section = documentSections[sectionIndex];
+  
+  // Show optimizing message
+  document.getElementById('debug-info').textContent = `Optimizing "${section.name}" section...`;
+  const optimizingMessage = addMessageToChat(`Optimizing your "${section.name}" section for the job description...`, 'ai');
+  
+  // Call the server API
+  fetch('/api/optimize', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      sectionContent: section.content, 
+      sectionName: section.name, 
+      jobDescription 
+    })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    // Remove optimizing message
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    chatMessages.removeChild(optimizingMessage);
+    
+    // Apply the optimized content
+    applyProposedChanges(section, data.response);
+    
+    // Add success message
+    addMessageToChat(`I've optimized your "${section.name}" section to better match the job description.`, 'ai');
+  })
+  .catch(error => {
+    console.error('Error calling API:', error);
+    
+    // Remove optimizing message
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    chatMessages.removeChild(optimizingMessage);
+    
+    document.getElementById('debug-info').textContent = `Error optimizing section: ${error.message}`;
+    addMessageToChat(`I encountered an error while optimizing your section: ${error.message}. Please try again later.`, 'ai');
+  });
+}
+
+// Helper function to add message to chat and return the message element
 function addMessageToChat(message, sender) {
   const chatMessages = document.querySelector('.ai-chat-messages');
   const messageDiv = document.createElement('div');
@@ -416,44 +609,18 @@ function addMessageToChat(message, sender) {
   messageDiv.textContent = message;
   chatMessages.appendChild(messageDiv);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Function to show suggestions
-function showSuggestions() {
-  const suggestionContainer = document.getElementById('suggestion-container');
-  const suggestionsList = document.getElementById('suggestions-list');
-  
-  if (suggestionContainer && suggestionsList) {
-    // Clear previous suggestions
-    suggestionsList.innerHTML = '';
-    
-    // Add a sample suggestion
-    const suggestion = document.createElement('div');
-    suggestion.className = 'suggestion-item';
-    suggestion.innerHTML = `
-      <h4>Professional Summary Improvement</h4>
-      <p>Your current summary is generic. Consider tailoring it to match the job requirements by mentioning specific skills like "data analysis" and "project management".</p>
-      <div class="suggestion-actions">
-        <button onclick="applyProposedChanges(documentSections[0], 'Experienced professional with 5+ years in data analysis and project management. Proven track record of delivering projects on time and under budget with a focus on quality and client satisfaction.')">Apply</button>
-        <button class="reject" onclick="closeSuggestions()">Dismiss</button>
-      </div>
-    `;
-    
-    suggestionsList.appendChild(suggestion);
-    suggestionContainer.style.display = 'block';
-  }
-}
-
-// Function to close suggestions
-function closeSuggestions() {
-  const suggestionContainer = document.getElementById('suggestion-container');
-  if (suggestionContainer) {
-    suggestionContainer.style.display = 'none';
-  }
+  return messageDiv;
 }
 
 // Function to mark a section
 function markSection() {
+  const range = quill.getSelection();
+  if (!range) {
+    document.getElementById('debug-info').textContent = 'Please select text to mark as a section.';
+    return;
+  }
+  
+  // Show popup for section type
   const sectionPopup = document.getElementById('section-popup');
   if (sectionPopup) {
     sectionPopup.style.display = 'flex';
@@ -471,16 +638,18 @@ function hideSectionPopup() {
 // Function to apply section
 function applySection() {
   const sectionType = document.getElementById('section-type').value;
-  const customSectionName = document.getElementById('custom-section-name').value;
   
-  let sectionName = sectionType;
-  if (sectionType === 'custom') {
-    if (!customSectionName.trim()) {
-      alert('Please enter a custom section name');
-      return;
-    }
-    sectionName = customSectionName;
-  } else if (!sectionType) {
+  // Define section names mapping
+  const sectionNames = {
+    'summary': 'Professional Summary',
+    'experience': 'Work Experience',
+    'education': 'Education',
+    'skills': 'Skills',
+    'projects': 'Projects',
+    'certifications': 'Certifications'
+  };
+  
+  if (!sectionType) {
     alert('Please select a section type');
     return;
   }
@@ -495,10 +664,10 @@ function applySection() {
   // Get the content of the selected text
   const content = quill.getText(range.index, range.length);
   
-  // Add section to documentSections
+  // Add section to documentSections with proper name
   documentSections.push({
-    name: sectionName,
-    type: sectionType === 'custom' ? 'custom' : sectionType,
+    name: sectionNames[sectionType], // Use the mapped name
+    type: sectionType,
     content: content,
     range: range
   });
@@ -506,73 +675,430 @@ function applySection() {
   // Update section selector in AI chat
   updateSectionSelector();
   
+  // Format the text to indicate it's a section
+  quill.formatText(range.index, range.length, {
+    'background': '#e6f7ff'
+  });
+  
   // Hide popup
   hideSectionPopup();
   
   // Show confirmation
-  document.getElementById('debug-info').textContent = `Marked selected text as "${sectionName}" section`;
+  document.getElementById('debug-info').textContent = `Marked as ${sectionNames[sectionType]}`;
 }
 
 // Function to update section selector
 function updateSectionSelector() {
-  const sectionSelector = document.getElementById('section-selector');
-  if (sectionSelector) {
-    // Clear existing options except the first one
-    while (sectionSelector.options.length > 1) {
-      sectionSelector.remove(1);
-    }
-    
-    // Add options for each section
-    documentSections.forEach((section, index) => {
-      const option = document.createElement('option');
-      option.value = index;
-      option.textContent = section.name;
-      sectionSelector.appendChild(option);
-    });
+  const selector = document.getElementById('section-selector');
+  
+  // Clear existing options except the first one
+  while (selector.options.length > 1) {
+    selector.remove(1);
   }
+  
+  // Add options for each section
+  documentSections.forEach((section, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = section.name; // Use the stored section name
+    selector.appendChild(option);
+  });
 }
 
-// Function to analyze document
-function analyzeDocument() {
-  // In a real app, this would send the document to an AI API for analysis
-  document.getElementById('debug-info').textContent = 'Analyzing document...';
+// Function to show suggestions from AI
+function showSuggestions() {
+  console.log("showSuggestions called");
   
-  setTimeout(() => {
-    document.getElementById('debug-info').textContent = 'Analysis complete. Check the AI Assistant for suggestions.';
-    
-    // Add a message to the chat
-    addMessageToChat("I've analyzed your document. Here are some suggestions to improve your resume:", 'ai');
-    
-    // Show suggestions
-    showSuggestions();
-    
-    // Expand the chat if it's collapsed
-    const chatContainer = document.getElementById('ai-chat-container');
-    if (chatContainer && chatContainer.classList.contains('collapsed')) {
-      toggleAIChat();
+  // Check if we have sections
+  if (documentSections.length === 0) {
+    addMessageToChat("Please mark sections in your document first to get specific suggestions.", 'ai');
+    return;
+  }
+  
+  const suggestionContainer = document.getElementById('suggestion-container');
+  if (!suggestionContainer) {
+    console.error("Suggestion container not found in the DOM");
+    return;
+  }
+  
+  // Make sure the container is visible
+  suggestionContainer.style.display = 'flex';
+  
+  // Clear previous suggestions
+  const suggestionsList = document.getElementById('suggestions-list');
+  if (suggestionsList) {
+    suggestionsList.innerHTML = '';
+  } else {
+    console.error("Suggestions list not found in the DOM");
+    return;
+  }
+  
+  console.log(`Creating suggestions for ${documentSections.length} sections`);
+  
+  // Add suggestions for each section
+  documentSections.forEach((section, index) => {
+    // Create a suggestion for this section
+    createSuggestionForSection(section, index);
+  });
+}
+
+// Function to show suggestions for a specific section
+function showSuggestionsForSection(section) {
+  console.log("showSuggestionsForSection called for", section.name);
+  
+  const suggestionContainer = document.getElementById('suggestion-container');
+  if (!suggestionContainer) {
+    console.error("Suggestion container not found in the DOM");
+    return;
+  }
+  
+  // Make sure the container is visible
+  suggestionContainer.style.display = 'flex';
+  
+  // Clear previous suggestions
+  const suggestionsList = document.getElementById('suggestions-list');
+  if (suggestionsList) {
+    suggestionsList.innerHTML = '';
+  } else {
+    console.error("Suggestions list not found in the DOM");
+    return;
+  }
+  
+  // Create a suggestion for this section
+  createSuggestionForSection(section, documentSections.indexOf(section));
+}
+
+// Function to create a suggestion for a section
+function createSuggestionForSection(section, index) {
+  console.log(`Creating suggestion for section: ${section.name}`);
+  
+  const suggestionsList = document.getElementById('suggestions-list');
+  if (!suggestionsList) {
+    console.error("Suggestions list not found");
+    return;
+  }
+  
+  // Create suggestion item
+  const suggestionItem = document.createElement('div');
+  suggestionItem.className = 'suggestion-item';
+  
+  // Create suggestion header
+  const suggestionHeader = document.createElement('div');
+  suggestionHeader.className = 'suggestion-item-header';
+  suggestionHeader.innerHTML = `<strong>${section.name}</strong>`;
+  
+  // Create suggestion content
+  const suggestionContent = document.createElement('div');
+  suggestionContent.className = 'suggestion-item-content';
+  
+  // Create original content
+  const originalContent = document.createElement('div');
+  originalContent.className = 'original-content';
+  originalContent.innerHTML = `<h4>Original</h4><div class="content-text">${section.content}</div>`;
+  
+  // Create improved content (will be filled by AI)
+  const improvedContent = document.createElement('div');
+  improvedContent.className = 'improved-content';
+  improvedContent.innerHTML = `<h4>Suggested Improvement</h4><div class="content-text">Loading AI suggestion...</div>`;
+  
+  // Create action buttons
+  const actionButtons = document.createElement('div');
+  actionButtons.className = 'suggestion-actions';
+  
+  const applyButton = document.createElement('button');
+  applyButton.textContent = 'Apply Change';
+  applyButton.disabled = true; // Disabled until suggestion is loaded
+  applyButton.onclick = function() {
+    // Get the improved content text
+    const improvedText = improvedContent.querySelector('.content-text').textContent;
+    applyProposedChanges(section, improvedText);
+  };
+  
+  const ignoreButton = document.createElement('button');
+  ignoreButton.textContent = 'Ignore';
+  ignoreButton.onclick = function() {
+    suggestionItem.remove();
+    // If no more suggestions, hide the container
+    if (suggestionsList.children.length === 0) {
+      closeSuggestions();
     }
-  }, 1500);
+  };
+  
+  // Add buttons to action container
+  actionButtons.appendChild(applyButton);
+  actionButtons.appendChild(ignoreButton);
+  
+  // Add all elements to suggestion item
+  suggestionContent.appendChild(originalContent);
+  suggestionContent.appendChild(improvedContent);
+  suggestionItem.appendChild(suggestionHeader);
+  suggestionItem.appendChild(suggestionContent);
+  suggestionItem.appendChild(actionButtons);
+  
+  // Add suggestion item to list
+  suggestionsList.appendChild(suggestionItem);
+  
+  // Get AI suggestion for this section
+  getAISuggestionForSection(section, improvedContent, applyButton);
 }
 
-// Function to apply proposed changes
-function applyProposedChanges(section, optimizedContent) {
-  // Replace the section content with the optimized version
-  const range = section.range;
-  quill.deleteText(range.index, range.length);
-  quill.insertText(range.index, optimizedContent);
+// Function to get AI suggestion for a section
+function getAISuggestionForSection(section, improvedContentElement, applyButton) {
+  console.log(`Getting AI suggestion for section: ${section.name}`);
   
-  // Update the section content
-  section.content = optimizedContent;
+  // Call the server API to get a suggestion
+  fetch('/api/optimize', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      sectionContent: section.content, 
+      sectionName: section.name, 
+      jobDescription: "Improve this section to be more impactful and professional" 
+    })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    console.log(`Received AI suggestion for section: ${section.name}`);
+    
+    // Update the improved content with the AI suggestion
+    const contentTextElement = improvedContentElement.querySelector('.content-text');
+    contentTextElement.textContent = data.response;
+    
+    // Enable the apply button
+    applyButton.disabled = false;
+    
+    // Add a diff view to highlight changes
+    const diffElement = document.createElement('div');
+    diffElement.className = 'diff-view';
+    diffElement.innerHTML = `<h4>Changes</h4><div class="diff-text">${generateDiffView(section.content, data.response)}</div>`;
+    
+    // Insert diff view between original and improved
+    improvedContentElement.parentNode.insertBefore(diffElement, improvedContentElement);
+  })
+  .catch(error => {
+    console.error('Error getting AI suggestion:', error);
+    const contentTextElement = improvedContentElement.querySelector('.content-text');
+    contentTextElement.textContent = `Error: ${error.message}`;
+  });
+}
+
+// Function to generate a simple diff view
+function generateDiffView(original, improved) {
+  // This is a simple implementation - for a real app, you might want to use a proper diff library
+  const words1 = original.split(' ');
+  const words2 = improved.split(' ');
   
-  // Hide the suggestion container
+  let diffHtml = '';
+  let i = 0, j = 0;
+  
+  while (i < words1.length || j < words2.length) {
+    if (i < words1.length && j < words2.length && words1[i] === words2[j]) {
+      // Words are the same
+      diffHtml += words1[i] + ' ';
+      i++;
+      j++;
+    } else {
+      // Words are different
+      if (i < words1.length) {
+        diffHtml += `<span class="removed">${words1[i]}</span> `;
+        i++;
+      }
+      if (j < words2.length) {
+        diffHtml += `<span class="added">${words2[j]}</span> `;
+        j++;
+      }
+    }
+  }
+  
+  return diffHtml;
+}
+
+// Function to close suggestions
+function closeSuggestions() {
+  console.log("closeSuggestions called");
   const suggestionContainer = document.getElementById('suggestion-container');
   if (suggestionContainer) {
     suggestionContainer.style.display = 'none';
   }
-  
-  // Show success message
-  document.getElementById('debug-info').textContent = `"${section.name}" section optimized successfully!`;
-  
-  // Add a message to the chat
-  addMessageToChat(`I've applied the optimized version of your "${section.name}" section with relevant keywords for ATS.`, 'ai');
 }
+
+// Function to apply proposed changes
+function applyProposedChanges(section, suggestion) {
+  if (!section || !suggestion) {
+    addMessageToChat('Error: Missing section or suggestion content.', 'ai');
+    return;
+  }
+  
+  try {
+    const range = section.range;
+    if (!range) {
+      addMessageToChat('Error: Could not find the section to update.', 'ai');
+      return;
+    }
+    
+    // Store old content for undo
+    const oldContent = section.content;
+    
+    // Apply the changes
+    quill.deleteText(range.index, range.length);
+    quill.insertText(range.index, suggestion);
+    
+    // Update section data
+    section.content = suggestion;
+    section.range = {
+      index: range.index,
+      length: suggestion.length
+    };
+    
+    // Format the section background
+    quill.formatText(range.index, suggestion.length, {
+      'background': '#e6f7ff'
+    });
+    
+    // Show success message
+    addMessageToChat('✓ Changes applied successfully! The section has been updated.', 'ai');
+    
+    // Add undo button
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    const undoDiv = document.createElement('div');
+    undoDiv.className = 'ai-chat-buttons';
+    
+    const undoButton = document.createElement('button');
+    undoButton.className = 'ai-chat-btn undo-btn';
+    undoButton.textContent = 'Undo Changes';
+    undoButton.onclick = function() {
+      quill.deleteText(range.index, suggestion.length);
+      quill.insertText(range.index, oldContent);
+      section.content = oldContent;
+      section.range = {
+        index: range.index,
+        length: oldContent.length
+      };
+      quill.formatText(range.index, oldContent.length, {
+        'background': '#e6f7ff'
+      });
+      addMessageToChat('Changes undone. Restored previous version.', 'ai');
+      undoDiv.remove();
+    };
+    
+    undoDiv.appendChild(undoButton);
+    chatMessages.appendChild(undoDiv);
+    
+  } catch (error) {
+    console.error('Error applying changes:', error);
+    addMessageToChat('Error applying changes. Please try again.', 'ai');
+  }
+}
+
+// Function to review sections one by one
+function reviewSectionBySectionSuggestions() {
+  console.log("reviewSectionBySectionSuggestions called");
+  
+  // Check if we have sections
+  if (documentSections.length === 0) {
+    addMessageToChat("Please mark sections in your document first to review them one by one.", 'ai');
+    return;
+  }
+  
+  // Start with the first section
+  startSectionReview(0);
+}
+
+// Function to start reviewing a specific section
+function startSectionReview(sectionIndex) {
+  if (sectionIndex >= documentSections.length) {
+    // We've reviewed all sections
+    addMessageToChat("That's all the sections! Your resume is now improved.", 'ai');
+    return;
+  }
+  
+  const section = documentSections[sectionIndex];
+  console.log(`Starting review for section: ${section.name}`);
+  
+  // Show a message about this section
+  addMessageToChat(`Let's review your "${section.name}" section:`, 'ai');
+  
+  // Call the server API to get a suggestion
+  fetch('/api/optimize', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      sectionContent: section.content, 
+      sectionName: section.name, 
+      jobDescription: "Improve this section to be more impactful and professional" 
+    })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  })
+  .then(data => {
+    console.log(`Received AI suggestion for section: ${section.name}`);
+    
+    // Show the original content
+    addMessageToChat(`Original: ${section.content}`, 'ai');
+    
+    // Show the suggested improvement
+    addMessageToChat(`Suggested improvement: ${data.response}`, 'ai');
+    
+    // Add buttons to apply or skip
+    const chatMessages = document.querySelector('.ai-chat-messages');
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'ai-chat-buttons';
+    
+    const applyButton = document.createElement('button');
+    applyButton.className = 'ai-chat-btn';
+    applyButton.style.backgroundColor = '#28a745';
+    applyButton.textContent = 'Apply This Change';
+    applyButton.onclick = function() {
+      applyProposedChanges(section, data.response);
+      
+      // Move to the next section
+      setTimeout(() => {
+        startSectionReview(sectionIndex + 1);
+      }, 1000);
+    };
+    
+    const skipButton = document.createElement('button');
+    skipButton.className = 'ai-chat-btn';
+    skipButton.style.backgroundColor = '#6c757d';
+    skipButton.textContent = 'Skip This Section';
+    skipButton.onclick = function() {
+      addMessageToChat(`Skipped changes to "${section.name}" section.`, 'ai');
+      
+      // Move to the next section
+      setTimeout(() => {
+        startSectionReview(sectionIndex + 1);
+      }, 1000);
+    };
+    
+    buttonsDiv.appendChild(applyButton);
+    buttonsDiv.appendChild(skipButton);
+    chatMessages.appendChild(buttonsDiv);
+  })
+  .catch(error => {
+    console.error('Error getting AI suggestion:', error);
+    addMessageToChat(`Error getting suggestion for "${section.name}": ${error.message}`, 'ai');
+    
+    // Move to the next section despite the error
+    setTimeout(() => {
+      startSectionReview(sectionIndex + 1);
+    }, 1000);
+  });
+}
+
+// Make sure these functions are available globally
+window.showSuggestions = showSuggestions;
+window.closeSuggestions = closeSuggestions;
+window.showSuggestionsForSection = showSuggestionsForSection;

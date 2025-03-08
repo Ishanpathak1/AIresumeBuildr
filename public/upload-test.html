@@ -151,44 +151,31 @@
         </div>
         
         <!-- Section Marking Popup -->
-        <div id="section-popup" class="section-popup">
+        <div id="section-popup" class="section-popup" style="display: none;">
             <div class="section-popup-content">
-                <h3>Mark Selected Text as Section</h3>
+                <h3>Select Section Type</h3>
                 <div class="section-options">
                     <select id="section-type">
                         <option value="">Select a section type...</option>
-                        <option value="contact">Contact Information</option>
                         <option value="summary">Professional Summary</option>
                         <option value="experience">Work Experience</option>
                         <option value="education">Education</option>
                         <option value="skills">Skills</option>
                         <option value="projects">Projects</option>
                         <option value="certifications">Certifications</option>
-                        <option value="languages">Languages</option>
-                        <option value="interests">Interests</option>
-                        <option value="references">References</option>
-                        <option value="custom">Custom Section...</option>
                     </select>
-                    <div id="custom-section-container" style="display: none;">
-                        <input type="text" id="custom-section-name" placeholder="Enter custom section name...">
-                    </div>
                 </div>
                 <div class="section-popup-buttons">
-                    <button id="apply-section-btn" class="popup-btn" onclick="applySection();">Apply</button>
-                    <button id="cancel-section-btn" class="popup-btn cancel" onclick="hideSectionPopup();">Cancel</button>
+                    <button onclick="hideSectionPopup()" class="popup-btn cancel">Cancel</button>
+                    <button onclick="applySection()" class="popup-btn">Confirm</button>
                 </div>
             </div>
         </div>
         
         <div id="editor-container">
             <div id="toolbar">
-                <button class="ql-bold"></button>
-                <button class="ql-italic"></button>
-                <button class="ql-underline"></button>
-                <button class="ql-header" value="1"></button>
-                <button class="ql-header" value="2"></button>
-                <button class="ql-list" value="ordered"></button>
-                <button class="ql-list" value="bullet"></button>
+                
+                <input type="file" id="docx-upload" style="display: none;" accept=".docx" onchange="importDocx(this.files[0])">
             </div>
             <div id="editor"></div>
         </div>
@@ -218,10 +205,10 @@
     </div>
     
     <!-- Suggestion Interface -->
-    <div id="suggestion-container" class="suggestion-container">
+    <div id="suggestion-container" class="suggestion-container" style="display: none;">
         <div class="suggestion-header">
             <h3>AI Suggestions</h3>
-            <button id="close-suggestions" onclick="closeSuggestions()"><i class="fas fa-times"></i></button>
+            <button id="close-suggestions" onclick="closeSuggestions()">×</button>
         </div>
         <div id="suggestions-list" class="suggestions-list">
             <!-- Suggestions will be added here dynamically -->
@@ -232,6 +219,13 @@
         <p>&copy; 2023 AI-Powered DOCX Editor. All rights reserved.</p>
     </footer>
 
-    <input type="file" id="docx-upload" accept=".docx" style="display: none;">
+    <script>
+        // Make sure any automatic popup triggers are removed
+        window.onload = function() {
+            // Only initialize necessary components
+            initializeEditor();
+            setupEventListeners();
+        };
+    </script>
 </body>
 </html> 
