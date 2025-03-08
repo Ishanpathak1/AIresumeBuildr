@@ -120,21 +120,45 @@ function saveAsDocx() {
       });
     });
     
-    // Create document with default styles
+    // Get all the formatted content
+    const delta = quill.getContents();
+    const docElements = [];
+    
+    // Convert Delta format to DOCX elements
+    delta.ops.forEach(op => {
+      const text = op.insert;
+      if (typeof text === 'string' && text.trim()) {
+        const attributes = op.attributes || {};
+        const textRun = new docx.TextRun({
+          text: text,
+          bold: attributes.bold,
+          italic: attributes.italic,
+          underline: attributes.underline,
+          size: attributes.size ? parseInt(attributes.size) * 2 : 24, // Convert to half-points or use default 12pt
+          font: attributes.font || "Arial",
+          color: attributes.color ? attributes.color.replace('#', '') : undefined
+        });
+        
+        docElements.push(
+          new docx.Paragraph({
+            children: [textRun],
+            spacing: {
+              after: 200 // Add some spacing between paragraphs
+            },
+            alignment: convertAlignment(attributes.align)
+          })
+        );
+      } else if (text === '\n') {
+        // Add paragraph break
+        docElements.push(new docx.Paragraph({}));
+      }
+    });
+    
+    // Create the document
     const doc = new docx.Document({
       sections: [{
         properties: {},
-        children: [
-          new docx.Paragraph({
-            children: [
-              new docx.TextRun({
-                text: quill.getText(),
-                size: 24, // 12pt font size (in half-points)
-                font: "Arial"
-              })
-            ]
-          })
-        ]
+        children: docElements
       }]
     });
     
@@ -169,11 +193,39 @@ function saveAsDocx() {
   }
 }
 
-// Helper function to convert pixels to points (for DOCX)
+// Helper function to convert Quill alignment to DOCX alignment
+function convertAlignment(align) {
+  switch (align) {
+    case 'right':
+      return docx.AlignmentType.RIGHT;
+    case 'center':
+      return docx.AlignmentType.CENTER;
+    case 'justify':
+      return docx.AlignmentType.JUSTIFIED;
+    default:
+      return docx.AlignmentType.LEFT;
+  }
+}
+
+// Helper function to convert pixels to points
 function pxToPoints(px) {
-  if (!px) return 24; // Default to 12pt (24 half-points)
-  const numPx = parseInt(px);
-  return isNaN(numPx) ? 24 : Math.round(numPx * 2);
+  if (!px) return 24; // Default to 12pt
+  const points = Math.round(parseInt(px) * 72 / 96); // Convert px to pt
+  return points * 2; // Convert to half-points for DOCX
+}
+
+// Helper function to clean color values
+function cleanColor(color) {
+  if (!color) return undefined;
+  if (color.startsWith('#')) return color.replace('#', '');
+  if (color.startsWith('rgb')) {
+    const rgb = color.match(/\d+/g);
+    if (rgb && rgb.length === 3) {
+      const hex = rgb.map(x => parseInt(x).toString(16).padStart(2, '0')).join('');
+      return hex.toUpperCase();
+    }
+  }
+  return undefined;
 }
 
 // Function to process a node and its styles
